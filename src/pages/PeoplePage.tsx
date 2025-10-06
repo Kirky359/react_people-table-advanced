@@ -12,6 +12,8 @@ type Error =
   | 'none';
 
 export type Sex = 'f' | 'm' | 'all';
+export type SortField = 'name' | 'sex' | 'born' | 'died' | null;
+export type SortOrder = 'asc' | 'desc';
 
 export const PeoplePage: React.FC = () => {
   const [people, setPeople] = useState<Person[]>([]);
@@ -21,7 +23,10 @@ export const PeoplePage: React.FC = () => {
 
   const [selectedCenturies, setSelectedCenturies] = useState<number[]>([]);
   const [sortBySex, setSortBySex] = useState<Sex>('all');
-  const [sortByQuery, setSortByQuery] = useState<string>('');
+  const [sortByQuery, setSortByQuery] = useState('');
+  const [sortField, setSortField] = useState<SortField>(null);
+  const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
+
   const [searchParams, setSearchParams] = useSearchParams();
 
   useEffect(() => {
@@ -42,6 +47,20 @@ export const PeoplePage: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    const sexParam = (searchParams.get('sex') as Sex) || 'all';
+    const queryParam = searchParams.get('query') || '';
+    const centuriesParam = searchParams.getAll('centuries').map(Number);
+    const sortParam = (searchParams.get('sort') as SortField) || null;
+    const orderParam = (searchParams.get('order') as SortOrder) || 'asc';
+
+    setSortBySex(sexParam);
+    setSortByQuery(queryParam);
+    setSelectedCenturies(centuriesParam);
+    setSortField(sortParam);
+    setSortOrder(orderParam);
+  }, [searchParams]);
+
+  useEffect(() => {
     const params = new URLSearchParams();
 
     if (sortBySex !== 'all') {
@@ -56,26 +75,22 @@ export const PeoplePage: React.FC = () => {
       selectedCenturies.forEach(c => params.append('centuries', String(c)));
     }
 
+    if (sortField) {
+      params.set('sort', sortField);
+      if (sortOrder === 'desc') {
+        params.set('order', 'desc');
+      }
+    }
+
     setSearchParams(params);
-  }, [sortBySex, sortByQuery, selectedCenturies, setSearchParams]);
-
-  useEffect(() => {
-    const sexParam = searchParams.get('sex') as Sex | null;
-    const queryParam = searchParams.get('query');
-    const centuriesParam = searchParams.getAll('centuries').map(Number);
-
-    if (sexParam && ['f', 'm', 'all'].includes(sexParam)) {
-      setSortBySex(sexParam);
-    }
-
-    if (queryParam) {
-      setSortByQuery(queryParam);
-    }
-
-    if (centuriesParam.length > 0) {
-      setSelectedCenturies(centuriesParam);
-    }
-  }, []);
+  }, [
+    sortBySex,
+    sortByQuery,
+    selectedCenturies,
+    sortField,
+    sortOrder,
+    setSearchParams,
+  ]);
 
   useEffect(() => {
     let filtered = [...people];
@@ -92,7 +107,7 @@ export const PeoplePage: React.FC = () => {
       });
     }
 
-    if (sortByQuery.trim() !== '') {
+    if (sortByQuery.trim()) {
       const q = sortByQuery.trim().toLowerCase();
 
       filtered = filtered.filter(p =>
@@ -102,8 +117,22 @@ export const PeoplePage: React.FC = () => {
       );
     }
 
+    if (sortField) {
+      filtered.sort((a, b) => {
+        const dir = sortOrder === 'asc' ? 1 : -1;
+        const valA = a[sortField];
+        const valB = b[sortField];
+
+        if (typeof valA === 'string' && typeof valB === 'string') {
+          return valA.localeCompare(valB) * dir;
+        }
+
+        return ((valA as number) - (valB as number)) * dir;
+      });
+    }
+
     setVisiblePeople(filtered);
-  }, [people, sortBySex, selectedCenturies, sortByQuery]);
+  }, [people, sortBySex, selectedCenturies, sortByQuery, sortField, sortOrder]);
 
   return (
     <>
@@ -125,7 +154,13 @@ export const PeoplePage: React.FC = () => {
         <div className="columns">
           <div className="column is-two-thirds">
             {visiblePeople.length > 0 ? (
-              <PeopleTable people={visiblePeople} />
+              <PeopleTable
+                people={visiblePeople}
+                sortField={sortField}
+                setSortField={setSortField}
+                sortOrder={sortOrder}
+                setSortOrder={setSortOrder}
+              />
             ) : (
               <p className="column is-two-thirds">
                 There are no people matching the current filters
